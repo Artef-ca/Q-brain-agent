@@ -1,0 +1,25 @@
+# Web (only needed if your code imports fastapi modules anywhere)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.13.3
+python-dotenv==1.0.1
+google-adk 
+google-genai
+google-cloud-modelarmor
+
+# GCP
+google-cloud-bigquery>=3.36.0
+google-cloud-discoveryengine>=0.16.0
+google-cloud-aiplatform[reasoningengine]>=1.76.0
+google-auth>=2.35.0
+
+python-json-logger
+
+# Data
+pandas==2.2.3
+pyarrow==18.1.0
+db-dtypes
+tabulate
+
+# Needed for ReasoningEngine packaging
+cloudpickle>=3.0.0

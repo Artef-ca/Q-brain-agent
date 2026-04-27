@@ -1,0 +1,1560 @@
+{
+  "manifest_version": "2.0",
+  "default_location": "EU",
+  "naming_convention": "qic_*",
+  "time_config": {
+    "calendar_start_date": "2024-01-01",
+    "calendar_end_date": "2026-12-31",
+    "weather_start_date": "2025-03-01",
+    "weather_end_date": "2026-02-28"
+  },
+  "scale": {
+    "profile": "medium",
+    "employees_active_avg": 1200,
+    "employees_total": 1800,
+    "vendors": 250,
+    "contracts_total": 1000,
+    "po_lines_per_year": 50000,
+    "work_orders_per_year": 12000,
+    "invoices_per_year": 60000,
+    "sixflags_ticket_txn_per_year": 900000,
+    "sixflags_pos_lines_per_year": 2700000,
+    "amc_ticket_txn_per_year": 450000,
+    "amc_fnb_lines_per_year": 900000,
+    "events_per_year": 30000
+  },
+  "datasets": [
+    {"dataset_id": "qic_generic", "description": "Generic reference datasets: date calendar, weather, events."},
+    {"dataset_id": "qic_shared", "description": "Shared dimensions across domains: location, asset, currency, projects."},
+    {"dataset_id": "qic_hr", "description": "HR domain: employee, payroll, performance, saudization, headcount."},
+    {"dataset_id": "qic_finance", "description": "Finance domain: GL, budgets, forecasts, cashflow, capex."},
+    {"dataset_id": "qic_dev_procurement", "description": "Procurement domain: vendors, contracts, POs, WOs, receipts, tender pipeline."},
+    {"dataset_id": "qic_dev_payments", "description": "Payments/AP domain: invoices, rejections, payments, overdue aging, disputes."},
+    {"dataset_id": "qic_asset_sixflags", "description": "Six Flags asset domain: operations, rides, ticketing, footfall, POS, satisfaction."},
+    {"dataset_id": "qic_asset_amc", "description": "AMC asset domain: cinemas, films, screenings, ticketing, F&B, occupancy, summaries."}
+  ],
+  "tables": [
+    {
+      "dataset_id": "qic_generic",
+      "table_id": "dim_date",
+      "description": "Daily calendar for time intelligence and planning. Grain: 1 row per Date. PK: Date.",
+      "grain": "1 row per Date",
+      "primary_key": ["Date"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Calendar date (PK)."},
+        {"name": "Year", "type": "INT64", "mode": "NULLABLE", "description": "Calendar year."},
+        {"name": "Quarter", "type": "INT64", "mode": "NULLABLE", "description": "Quarter number 1-4."},
+        {"name": "Month", "type": "INT64", "mode": "NULLABLE", "description": "Month number 1-12."},
+        {"name": "Month_Name", "type": "STRING", "mode": "NULLABLE", "description": "Month name."},
+        {"name": "Week", "type": "INT64", "mode": "NULLABLE", "description": "ISO week number."},
+        {"name": "Day", "type": "INT64", "mode": "NULLABLE", "description": "Day of month."},
+        {"name": "Day_Name", "type": "STRING", "mode": "NULLABLE", "description": "Day name."},
+        {"name": "Is_Weekend_Saudi", "type": "BOOL", "mode": "NULLABLE", "description": "Weekend (Fri/Sat)."},
+        {"name": "Is_Month_End", "type": "BOOL", "mode": "NULLABLE", "description": "Month-end flag."},
+        {"name": "Is_Quarter_End", "type": "BOOL", "mode": "NULLABLE", "description": "Quarter-end flag."},
+        {"name": "Is_Saudi_Public_Holiday", "type": "BOOL", "mode": "NULLABLE", "description": "Public holiday flag (planning)."},
+        {"name": "Holiday_Name", "type": "STRING", "mode": "NULLABLE", "description": "Holiday name."},
+        {"name": "Is_School_Holiday", "type": "BOOL", "mode": "NULLABLE", "description": "School holiday flag (planning)."},
+        {"name": "Is_University_Holiday", "type": "BOOL", "mode": "NULLABLE", "description": "University holiday flag (planning)."},
+        {"name": "Is_Ramadan_Flag", "type": "BOOL", "mode": "NULLABLE", "description": "Ramadan flag (synthetic ok)."},
+        {"name": "Season_Tag", "type": "STRING", "mode": "NULLABLE", "description": "Winter/Summer/Shoulder/Ramadan etc."}
+      ],
+      "seed_plan": {
+        "type": "generate_dim_date",
+        "params": {"start_date_ref": "time_config.calendar_start_date", "end_date_ref": "time_config.calendar_end_date"},
+        "row_target": 1096
+      }
+    },
+    {
+      "dataset_id": "qic_generic",
+      "table_id": "fact_weather_daily",
+      "description": "Daily weather observations. Grain: 1 row per Location per Date. PK: (Date, Location_ID).",
+      "grain": "1 row per Location per Date",
+      "primary_key": ["Date", "Location_ID"],
+      "foreign_keys": [
+        {"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]},
+        {"columns": ["Location_ID"], "ref_table": "qic_shared.dim_location", "ref_columns": ["Location_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Location_ID"],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Weather date."},
+        {"name": "Location_ID", "type": "STRING", "mode": "REQUIRED", "description": "Location key."},
+        {"name": "City", "type": "STRING", "mode": "NULLABLE", "description": "City (denormalized)."},
+        {"name": "Temp_Max_C", "type": "FLOAT64", "mode": "NULLABLE", "description": "Daily max temp."},
+        {"name": "Temp_Min_C", "type": "FLOAT64", "mode": "NULLABLE", "description": "Daily min temp."},
+        {"name": "Temp_Avg_C", "type": "FLOAT64", "mode": "NULLABLE", "description": "Daily avg temp."},
+        {"name": "Humidity_Avg", "type": "FLOAT64", "mode": "NULLABLE", "description": "Avg humidity %."},
+        {"name": "Wind_Speed_Avg_KMH", "type": "FLOAT64", "mode": "NULLABLE", "description": "Avg wind speed."},
+        {"name": "Precip_MM", "type": "FLOAT64", "mode": "NULLABLE", "description": "Precipitation mm."},
+        {"name": "Dust_Index", "type": "FLOAT64", "mode": "NULLABLE", "description": "Dust intensity 0-10."},
+        {"name": "Heat_Index", "type": "FLOAT64", "mode": "NULLABLE", "description": "Heat index proxy."},
+        {"name": "Weather_Condition", "type": "STRING", "mode": "NULLABLE", "description": "Clear/Dust/Rain/Haze."},
+        {"name": "Is_Extreme_Heat", "type": "BOOL", "mode": "NULLABLE", "description": "Temp_Max_C > 45."},
+        {"name": "Data_Source", "type": "STRING", "mode": "NULLABLE", "description": "Source system."}
+      ],
+      "seed_plan": {
+        "type": "generate_weather_synthetic",
+        "params": {
+          "start_date_ref": "time_config.weather_start_date",
+          "end_date_ref": "time_config.weather_end_date",
+          "locations_from": "qic_shared.dim_location",
+          "location_sample_count": 12,
+          "seasonality": true,
+          "dust_spikes": true,
+          "missing_rate": 0.015
+        },
+        "row_target": 4380
+      }
+    },
+    {
+      "dataset_id": "qic_generic",
+      "table_id": "fact_event_calendar",
+      "description": "Event calendar with popularity and attendance for demand modeling. Grain: 1 row per event instance. PK: Event_ID.",
+      "grain": "1 row per event instance",
+      "primary_key": ["Event_ID"],
+      "foreign_keys": [
+        {"columns": ["Location_ID"], "ref_table": "qic_shared.dim_location", "ref_columns": ["Location_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Start_Date"},
+      "clustering_fields": ["City", "Event_Type"],
+      "columns": [
+        {"name": "Event_ID", "type": "STRING", "mode": "REQUIRED", "description": "Unique event ID."},
+        {"name": "Event_Name", "type": "STRING", "mode": "NULLABLE", "description": "Event name."},
+        {"name": "Event_Type", "type": "STRING", "mode": "NULLABLE", "description": "Music/Family/Cultural/Sports/Outdoor."},
+        {"name": "Target_Audience", "type": "STRING", "mode": "NULLABLE", "description": "Family/Adults/All."},
+        {"name": "Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Start date."},
+        {"name": "End_Date", "type": "DATE", "mode": "NULLABLE", "description": "End date."},
+        {"name": "Start_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Start timestamp."},
+        {"name": "End_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "End timestamp."},
+        {"name": "Location_ID", "type": "STRING", "mode": "NULLABLE", "description": "Location reference."},
+        {"name": "City", "type": "STRING", "mode": "NULLABLE", "description": "City (denormalized)."},
+        {"name": "Venue_Name", "type": "STRING", "mode": "NULLABLE", "description": "Venue name."},
+        {"name": "Is_International", "type": "BOOL", "mode": "NULLABLE", "description": "International flag."},
+        {"name": "Featured_Artist", "type": "STRING", "mode": "NULLABLE", "description": "Artist/performer."},
+        {"name": "Popularity_Score", "type": "FLOAT64", "mode": "NULLABLE", "description": "0-100 popularity."},
+        {"name": "Expected_Attendance", "type": "INT64", "mode": "NULLABLE", "description": "Estimated attendance."},
+        {"name": "Ticketed_Flag", "type": "BOOL", "mode": "NULLABLE", "description": "Ticketed event flag."},
+        {"name": "Price_Min", "type": "NUMERIC", "mode": "NULLABLE", "description": "Min price."},
+        {"name": "Price_Max", "type": "NUMERIC", "mode": "NULLABLE", "description": "Max price."},
+        {"name": "Source_System", "type": "STRING", "mode": "NULLABLE", "description": "Source."},
+        {"name": "Created_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Created timestamp."}
+      ],
+      "seed_plan": {
+        "type": "generate_events_synthetic",
+        "params": {
+          "start_date_ref": "time_config.calendar_start_date",
+          "end_date_ref": "time_config.calendar_end_date",
+          "locations_from": "qic_shared.dim_location",
+          "events_per_year_ref": "scale.events_per_year",
+          "weekend_bias": 1.3,
+          "holiday_bias": 1.5,
+          "multi_day_share": 0.12,
+          "popularity_distribution": "heavy_tail"
+        },
+        "row_target": 90000
+      }
+    },
+
+    {
+      "dataset_id": "qic_shared",
+      "table_id": "dim_location",
+      "description": "Shared location dimension. Grain: 1 row per Location_ID.",
+      "grain": "1 row per Location_ID",
+      "primary_key": ["Location_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Location_ID", "type": "STRING", "mode": "REQUIRED", "description": "Location identifier."},
+        {"name": "Country", "type": "STRING", "mode": "NULLABLE", "description": "Country."},
+        {"name": "Region", "type": "STRING", "mode": "NULLABLE", "description": "Region/province."},
+        {"name": "City", "type": "STRING", "mode": "NULLABLE", "description": "City."},
+        {"name": "District", "type": "STRING", "mode": "NULLABLE", "description": "District."},
+        {"name": "Latitude", "type": "FLOAT64", "mode": "NULLABLE", "description": "Latitude."},
+        {"name": "Longitude", "type": "FLOAT64", "mode": "NULLABLE", "description": "Longitude."},
+        {"name": "Location_Type", "type": "STRING", "mode": "NULLABLE", "description": "City/Venue/Asset/POI."}
+      ],
+      "seed_plan": {
+        "type": "generate_locations",
+        "params": {"location_count": 30, "include_cities": ["Riyadh", "Jeddah", "Dammam", "AlUla", "Taif"], "include_qiddiya": true},
+        "row_target": 30
+      }
+    },
+    {
+      "dataset_id": "qic_shared",
+      "table_id": "dim_asset",
+      "description": "Shared asset dimension. Grain: 1 row per Asset_ID.",
+      "grain": "1 row per Asset_ID",
+      "primary_key": ["Asset_ID"],
+      "foreign_keys": [{"columns": ["Location_ID"], "ref_table": "qic_shared.dim_location", "ref_columns": ["Location_ID"]}],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Asset_ID", "type": "STRING", "mode": "REQUIRED", "description": "Asset identifier."},
+        {"name": "Asset_Name", "type": "STRING", "mode": "NULLABLE", "description": "Asset name."},
+        {"name": "Asset_Type", "type": "STRING", "mode": "NULLABLE", "description": "ThemePark/Cinema/WaterPark/Sports/etc."},
+        {"name": "Operator", "type": "STRING", "mode": "NULLABLE", "description": "Operator/brand."},
+        {"name": "Owner", "type": "STRING", "mode": "NULLABLE", "description": "Owner entity."},
+        {"name": "Open_Date", "type": "DATE", "mode": "NULLABLE", "description": "Opening date."},
+        {"name": "Location_ID", "type": "STRING", "mode": "NULLABLE", "description": "Location reference."}
+      ],
+      "seed_plan": {
+        "type": "generate_assets",
+        "params": {
+          "assets": [
+            {"asset_name": "Six Flags Qiddiya", "asset_type": "ThemePark", "operator": "Six Flags"},
+            {"asset_name": "Aqua Arabia", "asset_type": "WaterPark", "operator": "Qiddiya"},
+            {"asset_name": "Qiddiya Golf", "asset_type": "Sports", "operator": "Qiddiya"},
+            {"asset_name": "Qiddiya Stadium", "asset_type": "Sports", "operator": "Qiddiya"},
+            {"asset_name": "AMC Cinema Riyadh 1", "asset_type": "Cinema", "operator": "AMC"},
+            {"asset_name": "AMC Cinema Jeddah 1", "asset_type": "Cinema", "operator": "AMC"}
+          ]
+        },
+        "row_target": 12
+      }
+    },
+    {
+      "dataset_id": "qic_shared",
+      "table_id": "dim_project",
+      "description": "Shared project dimension (development initiatives, zones, capex projects). Grain: 1 row per Project_ID.",
+      "grain": "1 row per Project_ID",
+      "primary_key": ["Project_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Project_ID", "type": "STRING", "mode": "REQUIRED", "description": "Project identifier."},
+        {"name": "Project_Name", "type": "STRING", "mode": "NULLABLE", "description": "Project name."},
+        {"name": "Project_Type", "type": "STRING", "mode": "NULLABLE", "description": "Construction/IT/Operations/Marketing/etc."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Related asset (optional)."},
+        {"name": "Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Start date."},
+        {"name": "End_Date", "type": "DATE", "mode": "NULLABLE", "description": "End date."},
+        {"name": "Status", "type": "STRING", "mode": "NULLABLE", "description": "Planned/Active/Closed."}
+      ],
+      "seed_plan": {"type": "generate_projects", "params": {"project_count": 200}, "row_target": 200}
+    },
+    {
+      "dataset_id": "qic_shared",
+      "table_id": "dim_currency",
+      "description": "Currency dimension. Grain: 1 row per Currency_Code.",
+      "grain": "1 row per Currency_Code",
+      "primary_key": ["Currency_Code"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Currency_Code", "type": "STRING", "mode": "REQUIRED", "description": "Currency code (SAR, USD, EUR)."},
+        {"name": "Currency_Name", "type": "STRING", "mode": "NULLABLE", "description": "Currency name."},
+        {"name": "Is_Base_Currency", "type": "BOOL", "mode": "NULLABLE", "description": "True if base currency."}
+      ],
+      "seed_plan": {"type": "static_rows", "params": {"rows": [{"Currency_Code": "SAR", "Currency_Name": "Saudi Riyal", "Is_Base_Currency": true}, {"Currency_Code": "USD", "Currency_Name": "US Dollar", "Is_Base_Currency": false}, {"Currency_Code": "EUR", "Currency_Name": "Euro", "Is_Base_Currency": false}]}, "row_target": 3}
+    },
+
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "dim_department",
+      "description": "Department/unit hierarchy. Grain: 1 row per Department_ID.",
+      "grain": "1 row per Department_ID",
+      "primary_key": ["Department_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Department_ID", "type": "STRING", "mode": "REQUIRED", "description": "Department ID."},
+        {"name": "Department_Name", "type": "STRING", "mode": "NULLABLE", "description": "Department name."},
+        {"name": "Parent_Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Parent department."},
+        {"name": "Business_Unit", "type": "STRING", "mode": "NULLABLE", "description": "Business unit grouping."},
+        {"name": "Is_Active", "type": "BOOL", "mode": "NULLABLE", "description": "Active flag."}
+      ],
+      "seed_plan": {"type": "generate_departments", "params": {"department_count": 60}, "row_target": 60}
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "dim_job",
+      "description": "Job/title dimension. Grain: 1 row per Job_ID.",
+      "grain": "1 row per Job_ID",
+      "primary_key": ["Job_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Job_ID", "type": "STRING", "mode": "REQUIRED", "description": "Job ID."},
+        {"name": "Job_Title", "type": "STRING", "mode": "NULLABLE", "description": "Job title."},
+        {"name": "Job_Level", "type": "STRING", "mode": "NULLABLE", "description": "Job level/grade."},
+        {"name": "Job_Family", "type": "STRING", "mode": "NULLABLE", "description": "Job family."}
+      ],
+      "seed_plan": {"type": "generate_jobs", "params": {"job_count": 250}, "row_target": 250}
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "dim_comp_band",
+      "description": "Compensation bands by grade/level. Grain: 1 row per Band_ID.",
+      "grain": "1 row per Band_ID",
+      "primary_key": ["Band_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Band_ID", "type": "STRING", "mode": "REQUIRED", "description": "Band ID."},
+        {"name": "Job_Level", "type": "STRING", "mode": "NULLABLE", "description": "Job level mapping."},
+        {"name": "Min_Salary", "type": "NUMERIC", "mode": "NULLABLE", "description": "Min salary."},
+        {"name": "Mid_Salary", "type": "NUMERIC", "mode": "NULLABLE", "description": "Mid salary."},
+        {"name": "Max_Salary", "type": "NUMERIC", "mode": "NULLABLE", "description": "Max salary."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency (SAR)."}
+      ],
+      "seed_plan": {"type": "generate_comp_bands", "params": {"band_count": 30}, "row_target": 30}
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "dim_employee",
+      "description": "Employee master (no raw PII). Grain: 1 row per Employee_ID.",
+      "grain": "1 row per Employee_ID",
+      "primary_key": ["Employee_ID"],
+      "foreign_keys": [
+        {"columns": ["Department_ID"], "ref_table": "qic_hr.dim_department", "ref_columns": ["Department_ID"]},
+        {"columns": ["Job_ID"], "ref_table": "qic_hr.dim_job", "ref_columns": ["Job_ID"]},
+        {"columns": ["Band_ID"], "ref_table": "qic_hr.dim_comp_band", "ref_columns": ["Band_ID"]}
+      ],
+      "partitioning": null,
+      "clustering_fields": ["Department_ID", "Is_Saudi"],
+      "columns": [
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee identifier."},
+        {"name": "National_ID_Hash", "type": "STRING", "mode": "NULLABLE", "description": "Hashed national/iqama."},
+        {"name": "Gender", "type": "STRING", "mode": "NULLABLE", "description": "Gender."},
+        {"name": "Nationality_Code", "type": "STRING", "mode": "NULLABLE", "description": "Nationality code."},
+        {"name": "Is_Saudi", "type": "BOOL", "mode": "NULLABLE", "description": "Saudization flag."},
+        {"name": "Hire_Date", "type": "DATE", "mode": "NULLABLE", "description": "Hire date."},
+        {"name": "Termination_Date", "type": "DATE", "mode": "NULLABLE", "description": "Termination date (if any)."},
+        {"name": "Employment_Status", "type": "STRING", "mode": "NULLABLE", "description": "Active/OnLeave/Terminated."},
+        {"name": "Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Department reference."},
+        {"name": "Job_ID", "type": "STRING", "mode": "NULLABLE", "description": "Job reference."},
+        {"name": "Band_ID", "type": "STRING", "mode": "NULLABLE", "description": "Comp band reference."},
+        {"name": "Base_Salary_Monthly", "type": "NUMERIC", "mode": "NULLABLE", "description": "Base salary."},
+        {"name": "Allowance_Monthly", "type": "NUMERIC", "mode": "NULLABLE", "description": "Allowances."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Payroll_System", "type": "STRING", "mode": "NULLABLE", "description": "Payroll system."},
+        {"name": "Last_Updated_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Last update."}
+      ],
+      "seed_plan": {
+        "type": "generate_employees",
+        "params": {
+          "employee_count_ref": "scale.employees_total",
+          "active_avg_ref": "scale.employees_active_avg",
+          "saudi_ratio_start": 0.42,
+          "saudi_ratio_end": 0.50,
+          "gender_ratio": {"Male": 0.70, "Female": 0.30},
+          "payroll_systems": ["SAP Payroll", "Oracle HCM", "Workday Payroll"]
+        },
+        "row_target": 1800
+      }
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_employee_daily_snapshot",
+      "description": "Daily HR snapshot. Grain: 1 row per Employee_ID per Date. PK: (Date, Employee_ID).",
+      "grain": "1 row per Employee per Date",
+      "primary_key": ["Date", "Employee_ID"],
+      "foreign_keys": [
+        {"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]},
+        {"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Department_ID", "Is_Saudi"],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Snapshot date."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee reference."},
+        {"name": "Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Department reference (denormalized)."},
+        {"name": "Employment_Status", "type": "STRING", "mode": "NULLABLE", "description": "Status that day."},
+        {"name": "Is_Saudi", "type": "BOOL", "mode": "NULLABLE", "description": "Saudization snapshot."},
+        {"name": "Gender", "type": "STRING", "mode": "NULLABLE", "description": "Gender snapshot."},
+        {"name": "FTE", "type": "FLOAT64", "mode": "NULLABLE", "description": "FTE."},
+        {"name": "Daily_Total_Cost", "type": "NUMERIC", "mode": "NULLABLE", "description": "Daily cost allocation."},
+        {"name": "Snapshot_Source", "type": "STRING", "mode": "NULLABLE", "description": "Source system."}
+      ],
+      "seed_plan": {
+        "type": "generate_hr_daily_snapshots",
+        "params": {
+          "date_start_ref": "time_config.calendar_start_date",
+          "date_end_ref": "time_config.calendar_end_date",
+          "employees_from": "qic_hr.dim_employee",
+          "trend_saudization": true,
+          "weekly_absence_pattern": true
+        },
+        "row_target": 1300000
+      }
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_payroll_monthly",
+      "description": "Monthly payroll per employee. Grain: 1 row per Employee per Payroll_Month. PK: (Payroll_Month, Employee_ID).",
+      "grain": "1 row per Employee per Month",
+      "primary_key": ["Payroll_Month", "Employee_ID"],
+      "foreign_keys": [{"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}],
+      "partitioning": {"type": "MONTH", "field": "Payroll_Month"},
+      "clustering_fields": ["Department_ID"],
+      "columns": [
+        {"name": "Payroll_Month", "type": "DATE", "mode": "REQUIRED", "description": "Month (first day)."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee reference."},
+        {"name": "Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Department (denormalized)."},
+        {"name": "Gross_Pay", "type": "NUMERIC", "mode": "NULLABLE", "description": "Gross pay."},
+        {"name": "Net_Pay", "type": "NUMERIC", "mode": "NULLABLE", "description": "Net pay."},
+        {"name": "Deductions", "type": "NUMERIC", "mode": "NULLABLE", "description": "Deductions."},
+        {"name": "Employer_Contrib", "type": "NUMERIC", "mode": "NULLABLE", "description": "Employer contributions."},
+        {"name": "Payroll_System", "type": "STRING", "mode": "NULLABLE", "description": "Payroll system."},
+        {"name": "Payment_Date", "type": "DATE", "mode": "NULLABLE", "description": "Payment date."}
+      ],
+      "seed_plan": {
+        "type": "generate_payroll_monthly",
+        "params": {
+          "month_start_ref": "time_config.calendar_start_date",
+          "month_end_ref": "time_config.calendar_end_date",
+          "employees_from": "qic_hr.dim_employee",
+          "annual_increment_month": 12,
+          "bonus_months": ["2024-12-01", "2025-12-01", "2026-12-01"]
+        },
+        "row_target": 43000
+      }
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_performance_appraisal",
+      "description": "Performance appraisal results. Grain: 1 row per Employee per Cycle. PK: Appraisal_ID.",
+      "grain": "1 row per Employee per cycle",
+      "primary_key": ["Appraisal_ID"],
+      "foreign_keys": [{"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}],
+      "partitioning": {"type": "YEAR", "field": "Cycle_Start_Date"},
+      "clustering_fields": ["Department_ID", "Rating"],
+      "columns": [
+        {"name": "Appraisal_ID", "type": "STRING", "mode": "REQUIRED", "description": "Appraisal ID."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee reference."},
+        {"name": "Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Department (denormalized)."},
+        {"name": "Cycle_Name", "type": "STRING", "mode": "NULLABLE", "description": "Cycle name."},
+        {"name": "Cycle_Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Cycle start."},
+        {"name": "Cycle_End_Date", "type": "DATE", "mode": "NULLABLE", "description": "Cycle end."},
+        {"name": "Rating", "type": "STRING", "mode": "NULLABLE", "description": "Rating label."},
+        {"name": "Score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Numeric score."},
+        {"name": "Finalized_Date", "type": "DATE", "mode": "NULLABLE", "description": "Finalized date."}
+      ],
+      "seed_plan": {
+        "type": "generate_performance_cycles",
+        "params": {"cycles_per_year": 2, "employees_from": "qic_hr.dim_employee", "rating_distribution": "normal_bias"},
+        "row_target": 10800
+      }
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_increment_history",
+      "description": "Increment events (merit/promotion/adjustment). Grain: 1 row per increment. PK: Increment_ID.",
+      "grain": "1 row per increment event",
+      "primary_key": ["Increment_ID"],
+      "foreign_keys": [{"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Effective_Date"},
+      "clustering_fields": ["Increment_Type"],
+      "columns": [
+        {"name": "Increment_ID", "type": "STRING", "mode": "REQUIRED", "description": "Increment ID."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee."},
+        {"name": "Effective_Date", "type": "DATE", "mode": "NULLABLE", "description": "Effective date."},
+        {"name": "Increment_Type", "type": "STRING", "mode": "NULLABLE", "description": "Merit/Promotion/Adjustment."},
+        {"name": "Old_Base_Salary", "type": "NUMERIC", "mode": "NULLABLE", "description": "Old base salary."},
+        {"name": "New_Base_Salary", "type": "NUMERIC", "mode": "NULLABLE", "description": "New base salary."},
+        {"name": "Increment_Percent", "type": "FLOAT64", "mode": "NULLABLE", "description": "Increment percent."},
+        {"name": "Reference_Appraisal_ID", "type": "STRING", "mode": "NULLABLE", "description": "Linked appraisal (optional)."}
+      ],
+      "seed_plan": {"type": "generate_increments", "params": {"employees_from": "qic_hr.dim_employee", "appraisals_from": "qic_hr.fact_performance_appraisal"}, "row_target": 4000}
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_absence_daily",
+      "description": "Absence days (sick/annual/other). Grain: 1 row per absence event per day. PK: (Date, Employee_ID).",
+      "grain": "1 row per absent employee per day",
+      "primary_key": ["Date", "Employee_ID"],
+      "foreign_keys": [{"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Absence_Type"],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Absence date."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee."},
+        {"name": "Absence_Type", "type": "STRING", "mode": "NULLABLE", "description": "Sick/Annual/Other."},
+        {"name": "Hours_Absent", "type": "FLOAT64", "mode": "NULLABLE", "description": "Hours absent."}
+      ],
+      "seed_plan": {"type": "generate_absence", "params": {"employees_from": "qic_hr.dim_employee", "annual_absence_rate": 0.06}, "row_target": 180000}
+    },
+    {
+      "dataset_id": "qic_hr",
+      "table_id": "fact_attrition_events",
+      "description": "Employee exit events. Grain: 1 row per exit. PK: Attrition_ID.",
+      "grain": "1 row per attrition event",
+      "primary_key": ["Attrition_ID"],
+      "foreign_keys": [{"columns": ["Employee_ID"], "ref_table": "qic_hr.dim_employee", "ref_columns": ["Employee_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Termination_Date"},
+      "clustering_fields": ["Exit_Type"],
+      "columns": [
+        {"name": "Attrition_ID", "type": "STRING", "mode": "REQUIRED", "description": "Attrition event ID."},
+        {"name": "Employee_ID", "type": "STRING", "mode": "REQUIRED", "description": "Employee."},
+        {"name": "Termination_Date", "type": "DATE", "mode": "NULLABLE", "description": "Termination date."},
+        {"name": "Exit_Type", "type": "STRING", "mode": "NULLABLE", "description": "Voluntary/Involuntary/Retirement."},
+        {"name": "Exit_Reason", "type": "STRING", "mode": "NULLABLE", "description": "Reason."}
+      ],
+      "seed_plan": {"type": "generate_attrition", "params": {"employees_from": "qic_hr.dim_employee", "annual_attrition_rate": 0.06}, "row_target": 350}
+    },
+
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "dim_gl_account",
+      "description": "Chart of accounts. Grain: 1 row per GL_Account_ID.",
+      "grain": "1 row per GL_Account_ID",
+      "primary_key": ["GL_Account_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Account_Type"],
+      "columns": [
+        {"name": "GL_Account_ID", "type": "STRING", "mode": "REQUIRED", "description": "GL account ID."},
+        {"name": "GL_Account_Name", "type": "STRING", "mode": "NULLABLE", "description": "Account name."},
+        {"name": "Account_Type", "type": "STRING", "mode": "NULLABLE", "description": "Revenue/Expense/Asset/Liability/Equity."},
+        {"name": "Account_Group", "type": "STRING", "mode": "NULLABLE", "description": "Group/sub-ledger mapping."}
+      ],
+      "seed_plan": {"type": "generate_gl_accounts", "params": {"account_count": 350}, "row_target": 350}
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "dim_cost_center",
+      "description": "Cost centers for P&L and budgeting. Grain: 1 row per Cost_Center_ID.",
+      "grain": "1 row per Cost_Center_ID",
+      "primary_key": ["Cost_Center_ID"],
+      "foreign_keys": [{"columns": ["Department_ID"], "ref_table": "qic_hr.dim_department", "ref_columns": ["Department_ID"]}],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Cost_Center_ID", "type": "STRING", "mode": "REQUIRED", "description": "Cost center ID."},
+        {"name": "Cost_Center_Name", "type": "STRING", "mode": "NULLABLE", "description": "Cost center name."},
+        {"name": "Department_ID", "type": "STRING", "mode": "NULLABLE", "description": "Owning department."}
+      ],
+      "seed_plan": {"type": "generate_cost_centers", "params": {"cost_center_count": 120}, "row_target": 120}
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "fact_gl_journal_lines",
+      "description": "GL journal lines for actuals. Grain: 1 row per journal line. PK: Journal_Line_ID.",
+      "grain": "1 row per journal line",
+      "primary_key": ["Journal_Line_ID"],
+      "foreign_keys": [
+        {"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]},
+        {"columns": ["GL_Account_ID"], "ref_table": "qic_finance.dim_gl_account", "ref_columns": ["GL_Account_ID"]},
+        {"columns": ["Cost_Center_ID"], "ref_table": "qic_finance.dim_cost_center", "ref_columns": ["Cost_Center_ID"]},
+        {"columns": ["Project_ID"], "ref_table": "qic_shared.dim_project", "ref_columns": ["Project_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["GL_Account_ID", "Cost_Center_ID"],
+      "columns": [
+        {"name": "Journal_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "Journal line ID."},
+        {"name": "Journal_ID", "type": "STRING", "mode": "NULLABLE", "description": "Journal header ID."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Posting date."},
+        {"name": "GL_Account_ID", "type": "STRING", "mode": "NULLABLE", "description": "GL account."},
+        {"name": "Cost_Center_ID", "type": "STRING", "mode": "NULLABLE", "description": "Cost center."},
+        {"name": "Project_ID", "type": "STRING", "mode": "NULLABLE", "description": "Project reference."},
+        {"name": "Debit_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Debit."},
+        {"name": "Credit_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Credit."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Narration", "type": "STRING", "mode": "NULLABLE", "description": "Narration/description."}
+      ],
+      "seed_plan": {
+        "type": "generate_gl_lines",
+        "params": {
+          "date_start_ref": "time_config.calendar_start_date",
+          "date_end_ref": "time_config.calendar_end_date",
+          "lines_per_day": 1800,
+          "accounts_from": "qic_finance.dim_gl_account",
+          "cost_centers_from": "qic_finance.dim_cost_center",
+          "projects_from": "qic_shared.dim_project",
+          "seasonality": true
+        },
+        "row_target": 2000000
+      }
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "fact_budget_monthly",
+      "description": "Budget by month, cost center and account. Grain: 1 row per (Month, Cost_Center_ID, GL_Account_ID).",
+      "grain": "1 row per Month x Cost Center x Account",
+      "primary_key": ["Budget_Month", "Cost_Center_ID", "GL_Account_ID"],
+      "foreign_keys": [
+        {"columns": ["GL_Account_ID"], "ref_table": "qic_finance.dim_gl_account", "ref_columns": ["GL_Account_ID"]},
+        {"columns": ["Cost_Center_ID"], "ref_table": "qic_finance.dim_cost_center", "ref_columns": ["Cost_Center_ID"]}
+      ],
+      "partitioning": {"type": "MONTH", "field": "Budget_Month"},
+      "clustering_fields": ["Cost_Center_ID", "GL_Account_ID"],
+      "columns": [
+        {"name": "Budget_Month", "type": "DATE", "mode": "REQUIRED", "description": "Month (first day)."},
+        {"name": "Cost_Center_ID", "type": "STRING", "mode": "REQUIRED", "description": "Cost center."},
+        {"name": "GL_Account_ID", "type": "STRING", "mode": "REQUIRED", "description": "GL account."},
+        {"name": "Budget_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Budget amount."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Version", "type": "STRING", "mode": "NULLABLE", "description": "Budget version (Original/Revised)."}
+      ],
+      "seed_plan": {
+        "type": "generate_budget_monthly",
+        "params": {
+          "month_start_ref": "time_config.calendar_start_date",
+          "month_end_ref": "time_config.calendar_end_date",
+          "accounts_from": "qic_finance.dim_gl_account",
+          "cost_centers_from": "qic_finance.dim_cost_center"
+        },
+        "row_target": 432000
+      }
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "fact_forecast_monthly",
+      "description": "Forecast by month, cost center and account. Grain: 1 row per (Month, Cost_Center_ID, GL_Account_ID, Forecast_Version).",
+      "grain": "1 row per Month x Cost Center x Account x Version",
+      "primary_key": ["Forecast_Month", "Cost_Center_ID", "GL_Account_ID", "Forecast_Version"],
+      "foreign_keys": [
+        {"columns": ["GL_Account_ID"], "ref_table": "qic_finance.dim_gl_account", "ref_columns": ["GL_Account_ID"]},
+        {"columns": ["Cost_Center_ID"], "ref_table": "qic_finance.dim_cost_center", "ref_columns": ["Cost_Center_ID"]}
+      ],
+      "partitioning": {"type": "MONTH", "field": "Forecast_Month"},
+      "clustering_fields": ["Forecast_Version", "Cost_Center_ID"],
+      "columns": [
+        {"name": "Forecast_Month", "type": "DATE", "mode": "REQUIRED", "description": "Month (first day)."},
+        {"name": "Cost_Center_ID", "type": "STRING", "mode": "REQUIRED", "description": "Cost center."},
+        {"name": "GL_Account_ID", "type": "STRING", "mode": "REQUIRED", "description": "GL account."},
+        {"name": "Forecast_Version", "type": "STRING", "mode": "REQUIRED", "description": "Version label (e.g., FCST_M01)."},
+        {"name": "Forecast_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Forecast amount."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."}
+      ],
+      "seed_plan": {"type": "generate_forecast_monthly", "params": {"versions_per_year": 12}, "row_target": 518400}
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "fact_cashflow_daily",
+      "description": "Daily cashflow (in/out). Grain: 1 row per Date (optionally per bank account).",
+      "grain": "1 row per Date",
+      "primary_key": ["Date"],
+      "foreign_keys": [{"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Date."},
+        {"name": "Cash_In", "type": "NUMERIC", "mode": "NULLABLE", "description": "Cash inflows."},
+        {"name": "Cash_Out", "type": "NUMERIC", "mode": "NULLABLE", "description": "Cash outflows."},
+        {"name": "Net_Cashflow", "type": "NUMERIC", "mode": "NULLABLE", "description": "Cash_In - Cash_Out."}
+      ],
+      "seed_plan": {"type": "generate_cashflow_daily", "params": {"seasonality": true}, "row_target": 1096}
+    },
+    {
+      "dataset_id": "qic_finance",
+      "table_id": "fact_capex_project_monthly",
+      "description": "Capex spend by project. Grain: 1 row per Project_ID per Month.",
+      "grain": "1 row per Project per Month",
+      "primary_key": ["Capex_Month", "Project_ID"],
+      "foreign_keys": [{"columns": ["Project_ID"], "ref_table": "qic_shared.dim_project", "ref_columns": ["Project_ID"]}],
+      "partitioning": {"type": "MONTH", "field": "Capex_Month"},
+      "clustering_fields": ["Project_ID"],
+      "columns": [
+        {"name": "Capex_Month", "type": "DATE", "mode": "REQUIRED", "description": "Month (first day)."},
+        {"name": "Project_ID", "type": "STRING", "mode": "REQUIRED", "description": "Project."},
+        {"name": "Capex_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Capex amount."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."}
+      ],
+      "seed_plan": {"type": "generate_capex_monthly", "params": {"projects_from": "qic_shared.dim_project"}, "row_target": 7200}
+    },
+
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "dim_vendor",
+      "description": "Vendor master. Grain: 1 row per Vendor_ID.",
+      "grain": "1 row per Vendor_ID",
+      "primary_key": ["Vendor_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Risk_Rating", "Is_Local_Saudi"],
+      "columns": [
+        {"name": "Vendor_ID", "type": "STRING", "mode": "REQUIRED", "description": "Vendor ID."},
+        {"name": "Vendor_Name", "type": "STRING", "mode": "NULLABLE", "description": "Vendor name."},
+        {"name": "Vendor_Type", "type": "STRING", "mode": "NULLABLE", "description": "Contractor/Supplier/Consultant."},
+        {"name": "Country", "type": "STRING", "mode": "NULLABLE", "description": "Country."},
+        {"name": "Is_Local_Saudi", "type": "BOOL", "mode": "NULLABLE", "description": "Local flag."},
+        {"name": "Risk_Rating", "type": "STRING", "mode": "NULLABLE", "description": "Low/Medium/High."},
+        {"name": "Preferred_Vendor_Flag", "type": "BOOL", "mode": "NULLABLE", "description": "Preferred vendor."},
+        {"name": "Last_Updated_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Last update."}
+      ],
+      "seed_plan": {"type": "generate_vendors", "params": {"vendor_count_ref": "scale.vendors"}, "row_target": 250}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "dim_item",
+      "description": "Item/service catalog. Grain: 1 row per Item_ID.",
+      "grain": "1 row per Item_ID",
+      "primary_key": ["Item_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Category"],
+      "columns": [
+        {"name": "Item_ID", "type": "STRING", "mode": "REQUIRED", "description": "Item ID."},
+        {"name": "Item_Name", "type": "STRING", "mode": "NULLABLE", "description": "Item name."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Materials/Services/Consulting/etc."},
+        {"name": "UOM", "type": "STRING", "mode": "NULLABLE", "description": "Unit of measure."}
+      ],
+      "seed_plan": {"type": "generate_items", "params": {"item_count": 2500}, "row_target": 2500}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_contracts",
+      "description": "Awarded contracts in detail. Grain: 1 row per Contract_ID.",
+      "grain": "1 row per Contract_ID",
+      "primary_key": ["Contract_ID"],
+      "foreign_keys": [
+        {"columns": ["Vendor_ID"], "ref_table": "qic_dev_procurement.dim_vendor", "ref_columns": ["Vendor_ID"]},
+        {"columns": ["Project_ID"], "ref_table": "qic_shared.dim_project", "ref_columns": ["Project_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Award_Date"},
+      "clustering_fields": ["Vendor_ID", "Contract_Type"],
+      "columns": [
+        {"name": "Contract_ID", "type": "STRING", "mode": "REQUIRED", "description": "Contract ID."},
+        {"name": "Contract_Number", "type": "STRING", "mode": "NULLABLE", "description": "Contract number."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Project_ID", "type": "STRING", "mode": "NULLABLE", "description": "Project."},
+        {"name": "Contract_Type", "type": "STRING", "mode": "NULLABLE", "description": "EPC/Consulting/Services/Framework."},
+        {"name": "Award_Date", "type": "DATE", "mode": "NULLABLE", "description": "Award date."},
+        {"name": "Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Start date."},
+        {"name": "End_Date", "type": "DATE", "mode": "NULLABLE", "description": "End date."},
+        {"name": "Contract_Value", "type": "NUMERIC", "mode": "NULLABLE", "description": "Contract value."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Status", "type": "STRING", "mode": "NULLABLE", "description": "Active/Closed/Terminated."}
+      ],
+      "seed_plan": {"type": "generate_contracts", "params": {"contract_count_ref": "scale.contracts_total", "vendors_from": "qic_dev_procurement.dim_vendor", "projects_from": "qic_shared.dim_project"}, "row_target": 1000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_contract_milestones",
+      "description": "Contract milestones progress. Grain: 1 row per milestone. PK: Milestone_ID.",
+      "grain": "1 row per milestone",
+      "primary_key": ["Milestone_ID"],
+      "foreign_keys": [{"columns": ["Contract_ID"], "ref_table": "qic_dev_procurement.fact_contracts", "ref_columns": ["Contract_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Planned_Date"},
+      "clustering_fields": ["Contract_ID"],
+      "columns": [
+        {"name": "Milestone_ID", "type": "STRING", "mode": "REQUIRED", "description": "Milestone ID."},
+        {"name": "Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Contract."},
+        {"name": "Milestone_Name", "type": "STRING", "mode": "NULLABLE", "description": "Milestone name."},
+        {"name": "Planned_Date", "type": "DATE", "mode": "NULLABLE", "description": "Planned completion date."},
+        {"name": "Actual_Date", "type": "DATE", "mode": "NULLABLE", "description": "Actual completion date."},
+        {"name": "Progress_Pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Progress percent."},
+        {"name": "Status", "type": "STRING", "mode": "NULLABLE", "description": "Planned/InProgress/Completed/Delayed."}
+      ],
+      "seed_plan": {"type": "generate_contract_milestones", "params": {"contracts_from": "qic_dev_procurement.fact_contracts", "milestones_per_contract_range": [5, 12]}, "row_target": 8000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_contract_variations",
+      "description": "Change orders/variations for contracts. Grain: 1 row per Variation_ID.",
+      "grain": "1 row per variation",
+      "primary_key": ["Variation_ID"],
+      "foreign_keys": [{"columns": ["Contract_ID"], "ref_table": "qic_dev_procurement.fact_contracts", "ref_columns": ["Contract_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Variation_Date"},
+      "clustering_fields": ["Contract_ID"],
+      "columns": [
+        {"name": "Variation_ID", "type": "STRING", "mode": "REQUIRED", "description": "Variation ID."},
+        {"name": "Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Contract."},
+        {"name": "Variation_Date", "type": "DATE", "mode": "NULLABLE", "description": "Variation date."},
+        {"name": "Variation_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Variation amount."},
+        {"name": "Reason", "type": "STRING", "mode": "NULLABLE", "description": "Reason category."},
+        {"name": "Approved_Flag", "type": "BOOL", "mode": "NULLABLE", "description": "Approved flag."}
+      ],
+      "seed_plan": {"type": "generate_contract_variations", "params": {"contracts_from": "qic_dev_procurement.fact_contracts", "annual_variation_rate": 0.6}, "row_target": 2000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_purchase_orders",
+      "description": "PO lines for spend analysis. Grain: 1 row per PO line. PK: PO_Line_ID.",
+      "grain": "1 row per PO line",
+      "primary_key": ["PO_Line_ID"],
+      "foreign_keys": [
+        {"columns": ["Vendor_ID"], "ref_table": "qic_dev_procurement.dim_vendor", "ref_columns": ["Vendor_ID"]},
+        {"columns": ["Contract_ID"], "ref_table": "qic_dev_procurement.fact_contracts", "ref_columns": ["Contract_ID"]},
+        {"columns": ["Item_ID"], "ref_table": "qic_dev_procurement.dim_item", "ref_columns": ["Item_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "PO_Date"},
+      "clustering_fields": ["Vendor_ID", "Contract_ID"],
+      "columns": [
+        {"name": "PO_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "PO line ID."},
+        {"name": "PO_ID", "type": "STRING", "mode": "NULLABLE", "description": "PO header ID."},
+        {"name": "PO_Number", "type": "STRING", "mode": "NULLABLE", "description": "PO number."},
+        {"name": "PO_Date", "type": "DATE", "mode": "NULLABLE", "description": "PO date."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Contract."},
+        {"name": "Project_ID", "type": "STRING", "mode": "NULLABLE", "description": "Project."},
+        {"name": "Item_ID", "type": "STRING", "mode": "NULLABLE", "description": "Item."},
+        {"name": "Quantity", "type": "NUMERIC", "mode": "NULLABLE", "description": "Quantity."},
+        {"name": "Unit_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Unit price."},
+        {"name": "Line_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Line amount."},
+        {"name": "Tax_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Tax."},
+        {"name": "Total_Line_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Total."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "PO_Status", "type": "STRING", "mode": "NULLABLE", "description": "Approved/Cancelled/Closed."}
+      ],
+      "seed_plan": {"type": "generate_po_lines", "params": {"lines_per_year_ref": "scale.po_lines_per_year", "vendors_from": "qic_dev_procurement.dim_vendor", "contracts_from": "qic_dev_procurement.fact_contracts", "items_from": "qic_dev_procurement.dim_item", "projects_from": "qic_shared.dim_project"}, "row_target": 150000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_goods_receipt_lines",
+      "description": "Goods receipt (GRN) lines against PO. Grain: 1 row per receipt line. PK: GRN_Line_ID.",
+      "grain": "1 row per GRN line",
+      "primary_key": ["GRN_Line_ID"],
+      "foreign_keys": [{"columns": ["PO_Line_ID"], "ref_table": "qic_dev_procurement.fact_purchase_orders", "ref_columns": ["PO_Line_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Receipt_Date"},
+      "clustering_fields": ["Vendor_ID"],
+      "columns": [
+        {"name": "GRN_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "GRN line ID."},
+        {"name": "PO_Line_ID", "type": "STRING", "mode": "NULLABLE", "description": "PO line."},
+        {"name": "Receipt_Date", "type": "DATE", "mode": "NULLABLE", "description": "Receipt date."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Received_Qty", "type": "NUMERIC", "mode": "NULLABLE", "description": "Received qty."},
+        {"name": "Rejected_Qty", "type": "NUMERIC", "mode": "NULLABLE", "description": "Rejected qty."},
+        {"name": "Quality_Flag", "type": "BOOL", "mode": "NULLABLE", "description": "Quality issue flag."}
+      ],
+      "seed_plan": {"type": "generate_grn_lines", "params": {"po_lines_from": "qic_dev_procurement.fact_purchase_orders", "delivery_delay_days_range": [1, 35], "quality_issue_rate": 0.03}, "row_target": 140000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_work_orders",
+      "description": "Work orders linked to contracts/assets. Grain: 1 row per Work_Order_ID.",
+      "grain": "1 row per Work_Order_ID",
+      "primary_key": ["Work_Order_ID"],
+      "foreign_keys": [
+        {"columns": ["Contract_ID"], "ref_table": "qic_dev_procurement.fact_contracts", "ref_columns": ["Contract_ID"]},
+        {"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Request_Date"},
+      "clustering_fields": ["Asset_ID", "Work_Order_Status"],
+      "columns": [
+        {"name": "Work_Order_ID", "type": "STRING", "mode": "REQUIRED", "description": "Work order ID."},
+        {"name": "Work_Order_Number", "type": "STRING", "mode": "NULLABLE", "description": "WO number."},
+        {"name": "Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Contract."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset."},
+        {"name": "Request_Date", "type": "DATE", "mode": "NULLABLE", "description": "Request date."},
+        {"name": "Planned_Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Planned start."},
+        {"name": "Planned_End_Date", "type": "DATE", "mode": "NULLABLE", "description": "Planned end."},
+        {"name": "Actual_End_Date", "type": "DATE", "mode": "NULLABLE", "description": "Actual end."},
+        {"name": "Work_Order_Status", "type": "STRING", "mode": "NULLABLE", "description": "Open/InProgress/Closed/Cancelled."},
+        {"name": "Approved_Cost", "type": "NUMERIC", "mode": "NULLABLE", "description": "Approved cost."}
+      ],
+      "seed_plan": {"type": "generate_work_orders", "params": {"work_orders_per_year_ref": "scale.work_orders_per_year", "contracts_from": "qic_dev_procurement.fact_contracts", "assets_from": "qic_shared.dim_asset"}, "row_target": 36000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_tender_pipeline",
+      "description": "Tender/RFQ/RFP pipeline lifecycle. Grain: 1 row per Tender_ID.",
+      "grain": "1 row per Tender_ID",
+      "primary_key": ["Tender_ID"],
+      "foreign_keys": [{"columns": ["Project_ID"], "ref_table": "qic_shared.dim_project", "ref_columns": ["Project_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Created_Date"},
+      "clustering_fields": ["Stage", "Category"],
+      "columns": [
+        {"name": "Tender_ID", "type": "STRING", "mode": "REQUIRED", "description": "Tender ID."},
+        {"name": "Created_Date", "type": "DATE", "mode": "NULLABLE", "description": "Created date."},
+        {"name": "Project_ID", "type": "STRING", "mode": "NULLABLE", "description": "Project."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Construction/IT/Services/etc."},
+        {"name": "Stage", "type": "STRING", "mode": "NULLABLE", "description": "Draft/Published/Evaluating/Awarded/Cancelled."},
+        {"name": "Expected_Value", "type": "NUMERIC", "mode": "NULLABLE", "description": "Expected value."},
+        {"name": "Awarded_Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Linked contract if awarded."}
+      ],
+      "seed_plan": {"type": "generate_tenders", "params": {"tenders_per_year": 3000, "projects_from": "qic_shared.dim_project"}, "row_target": 9000}
+    },
+    {
+      "dataset_id": "qic_dev_procurement",
+      "table_id": "fact_vendor_performance_monthly",
+      "description": "Vendor performance KPIs by month. Grain: 1 row per Vendor per Month.",
+      "grain": "1 row per Vendor per Month",
+      "primary_key": ["Perf_Month", "Vendor_ID"],
+      "foreign_keys": [{"columns": ["Vendor_ID"], "ref_table": "qic_dev_procurement.dim_vendor", "ref_columns": ["Vendor_ID"]}],
+      "partitioning": {"type": "MONTH", "field": "Perf_Month"},
+      "clustering_fields": ["Vendor_ID"],
+      "columns": [
+        {"name": "Perf_Month", "type": "DATE", "mode": "REQUIRED", "description": "Month (first day)."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "REQUIRED", "description": "Vendor."},
+        {"name": "OnTime_Delivery_Pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "On-time delivery %."},
+        {"name": "Quality_Issue_Rate", "type": "FLOAT64", "mode": "NULLABLE", "description": "Quality issue rate."},
+        {"name": "Avg_Delay_Days", "type": "FLOAT64", "mode": "NULLABLE", "description": "Average delay days."},
+        {"name": "Performance_Score", "type": "FLOAT64", "mode": "NULLABLE", "description": "0-100 score."}
+      ],
+      "seed_plan": {"type": "generate_vendor_perf_monthly", "params": {"vendors_from": "qic_dev_procurement.dim_vendor"}, "row_target": 9000}
+    },
+
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "dim_payment_terms",
+      "description": "Payment terms reference. Grain: 1 row per Payment_Terms_Code.",
+      "grain": "1 row per Payment_Terms_Code",
+      "primary_key": ["Payment_Terms_Code"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Payment_Terms_Code", "type": "STRING", "mode": "REQUIRED", "description": "Terms code (NET30/NET45/etc.)."},
+        {"name": "Terms_Days", "type": "INT64", "mode": "NULLABLE", "description": "Terms days."}
+      ],
+      "seed_plan": {"type": "static_rows", "params": {"rows": [{"Payment_Terms_Code": "NET30", "Terms_Days": 30}, {"Payment_Terms_Code": "NET45", "Terms_Days": 45}, {"Payment_Terms_Code": "NET60", "Terms_Days": 60}, {"Payment_Terms_Code": "NET90", "Terms_Days": 90}]}, "row_target": 4}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "dim_rejection_reason",
+      "description": "Invoice rejection reasons reference. Grain: 1 row per Reason_Code.",
+      "grain": "1 row per Reason_Code",
+      "primary_key": ["Reason_Code"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Category"],
+      "columns": [
+        {"name": "Reason_Code", "type": "STRING", "mode": "REQUIRED", "description": "Reason code."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "MissingDocs/PricingMismatch/Compliance/etc."},
+        {"name": "Reason_Text", "type": "STRING", "mode": "NULLABLE", "description": "Reason description."}
+      ],
+      "seed_plan": {"type": "generate_rejection_reasons", "params": {"reason_count": 30}, "row_target": 30}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_invoices",
+      "description": "Invoice lifecycle for AP. Grain: 1 row per Invoice_ID.",
+      "grain": "1 row per Invoice_ID",
+      "primary_key": ["Invoice_ID"],
+      "foreign_keys": [
+        {"columns": ["Vendor_ID"], "ref_table": "qic_dev_procurement.dim_vendor", "ref_columns": ["Vendor_ID"]},
+        {"columns": ["Contract_ID"], "ref_table": "qic_dev_procurement.fact_contracts", "ref_columns": ["Contract_ID"]},
+        {"columns": ["PO_ID"], "ref_table": "qic_dev_procurement.fact_purchase_orders", "ref_columns": ["PO_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Invoice_Date"},
+      "clustering_fields": ["Vendor_ID", "Invoice_Status"],
+      "columns": [
+        {"name": "Invoice_ID", "type": "STRING", "mode": "REQUIRED", "description": "Invoice ID."},
+        {"name": "Invoice_Number", "type": "STRING", "mode": "NULLABLE", "description": "Invoice number."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Contract_ID", "type": "STRING", "mode": "NULLABLE", "description": "Contract."},
+        {"name": "PO_ID", "type": "STRING", "mode": "NULLABLE", "description": "PO header ID."},
+        {"name": "Invoice_Date", "type": "DATE", "mode": "NULLABLE", "description": "Invoice date."},
+        {"name": "Received_Date", "type": "DATE", "mode": "NULLABLE", "description": "Received date."},
+        {"name": "Payment_Terms_Code", "type": "STRING", "mode": "NULLABLE", "description": "Payment terms code."},
+        {"name": "Due_Date", "type": "DATE", "mode": "NULLABLE", "description": "Due date."},
+        {"name": "Invoice_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Amount before tax."},
+        {"name": "Tax_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Tax amount."},
+        {"name": "Total_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Total amount."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Invoice_Status", "type": "STRING", "mode": "NULLABLE", "description": "Received/Approved/Rejected/Paid/Overdue."},
+        {"name": "Approval_Date", "type": "DATE", "mode": "NULLABLE", "description": "Approval date."},
+        {"name": "Paid_Date", "type": "DATE", "mode": "NULLABLE", "description": "Paid date."},
+        {"name": "Overdue_Days", "type": "INT64", "mode": "NULLABLE", "description": "Overdue days."},
+        {"name": "Created_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Created."}
+      ],
+      "seed_plan": {
+        "type": "generate_invoices_from_procurement",
+        "params": {
+          "invoices_per_year_ref": "scale.invoices_per_year",
+          "po_source": "qic_dev_procurement.fact_purchase_orders",
+          "contracts_source": "qic_dev_procurement.fact_contracts",
+          "vendors_source": "qic_dev_procurement.dim_vendor",
+          "terms_source": "qic_dev_payments.dim_payment_terms",
+          "rejection_rate": 0.08,
+          "overdue_rate": 0.12
+        },
+        "row_target": 180000
+      }
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_invoice_lines",
+      "description": "Invoice lines for detailed spend analytics. Grain: 1 row per Invoice_Line_ID.",
+      "grain": "1 row per invoice line",
+      "primary_key": ["Invoice_Line_ID"],
+      "foreign_keys": [
+        {"columns": ["Invoice_ID"], "ref_table": "qic_dev_payments.fact_invoices", "ref_columns": ["Invoice_ID"]},
+        {"columns": ["Item_ID"], "ref_table": "qic_dev_procurement.dim_item", "ref_columns": ["Item_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Invoice_Date"},
+      "clustering_fields": ["Invoice_ID"],
+      "columns": [
+        {"name": "Invoice_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "Invoice line ID."},
+        {"name": "Invoice_ID", "type": "STRING", "mode": "NULLABLE", "description": "Invoice."},
+        {"name": "Invoice_Date", "type": "DATE", "mode": "NULLABLE", "description": "Invoice date (denormalized)."},
+        {"name": "Item_ID", "type": "STRING", "mode": "NULLABLE", "description": "Item/service."},
+        {"name": "Quantity", "type": "NUMERIC", "mode": "NULLABLE", "description": "Quantity."},
+        {"name": "Unit_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Unit price."},
+        {"name": "Line_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Line amount."}
+      ],
+      "seed_plan": {"type": "generate_invoice_lines", "params": {"invoices_from": "qic_dev_payments.fact_invoices", "avg_lines_per_invoice": 3}, "row_target": 540000}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_invoice_rejections",
+      "description": "Rejected invoices and reasons. Grain: 1 row per rejection event. PK: Invoice_Rejection_ID.",
+      "grain": "1 row per rejection",
+      "primary_key": ["Invoice_Rejection_ID"],
+      "foreign_keys": [
+        {"columns": ["Invoice_ID"], "ref_table": "qic_dev_payments.fact_invoices", "ref_columns": ["Invoice_ID"]},
+        {"columns": ["Reason_Code"], "ref_table": "qic_dev_payments.dim_rejection_reason", "ref_columns": ["Reason_Code"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Rejected_Date"},
+      "clustering_fields": ["Reason_Code"],
+      "columns": [
+        {"name": "Invoice_Rejection_ID", "type": "STRING", "mode": "REQUIRED", "description": "Rejection ID."},
+        {"name": "Invoice_ID", "type": "STRING", "mode": "NULLABLE", "description": "Invoice."},
+        {"name": "Rejected_Date", "type": "DATE", "mode": "NULLABLE", "description": "Rejected date."},
+        {"name": "Reason_Code", "type": "STRING", "mode": "NULLABLE", "description": "Reason code."},
+        {"name": "Rejected_By", "type": "STRING", "mode": "NULLABLE", "description": "Rejected by (role/user)."},
+        {"name": "Resubmitted_Date", "type": "DATE", "mode": "NULLABLE", "description": "Resubmitted date (if any)."}
+      ],
+      "seed_plan": {"type": "generate_invoice_rejections", "params": {"invoices_from": "qic_dev_payments.fact_invoices", "reasons_from": "qic_dev_payments.dim_rejection_reason"}, "row_target": 15000}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_payment_transactions",
+      "description": "Payments against invoices/contracts. Grain: 1 row per Payment_ID. PK: Payment_ID.",
+      "grain": "1 row per payment",
+      "primary_key": ["Payment_ID"],
+      "foreign_keys": [{"columns": ["Invoice_ID"], "ref_table": "qic_dev_payments.fact_invoices", "ref_columns": ["Invoice_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Payment_Date"},
+      "clustering_fields": ["Vendor_ID"],
+      "columns": [
+        {"name": "Payment_ID", "type": "STRING", "mode": "REQUIRED", "description": "Payment ID."},
+        {"name": "Invoice_ID", "type": "STRING", "mode": "NULLABLE", "description": "Invoice."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor (denormalized)."},
+        {"name": "Payment_Date", "type": "DATE", "mode": "NULLABLE", "description": "Payment date."},
+        {"name": "Payment_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Payment amount."},
+        {"name": "Currency", "type": "STRING", "mode": "NULLABLE", "description": "Currency."},
+        {"name": "Payment_Method", "type": "STRING", "mode": "NULLABLE", "description": "BankTransfer/etc."},
+        {"name": "Payment_Status", "type": "STRING", "mode": "NULLABLE", "description": "Paid/Reversed/Pending."},
+        {"name": "Payment_Reference", "type": "STRING", "mode": "NULLABLE", "description": "Reference."}
+      ],
+      "seed_plan": {"type": "generate_payments_from_invoices", "params": {"invoices_from": "qic_dev_payments.fact_invoices", "paid_share": 0.92}, "row_target": 165000}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_overdue_payments_daily",
+      "description": "Daily overdue snapshot for aging analysis. Grain: 1 row per Invoice_ID per Date when open. PK: (Date, Invoice_ID).",
+      "grain": "1 row per open invoice per day",
+      "primary_key": ["Date", "Invoice_ID"],
+      "foreign_keys": [
+        {"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]},
+        {"columns": ["Invoice_ID"], "ref_table": "qic_dev_payments.fact_invoices", "ref_columns": ["Invoice_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Aging_Bucket"],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Snapshot date."},
+        {"name": "Invoice_ID", "type": "STRING", "mode": "REQUIRED", "description": "Invoice."},
+        {"name": "Vendor_ID", "type": "STRING", "mode": "NULLABLE", "description": "Vendor."},
+        {"name": "Due_Date", "type": "DATE", "mode": "NULLABLE", "description": "Due date."},
+        {"name": "Outstanding_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Outstanding."},
+        {"name": "Overdue_Days", "type": "INT64", "mode": "NULLABLE", "description": "Overdue days."},
+        {"name": "Aging_Bucket", "type": "STRING", "mode": "NULLABLE", "description": "0-30/31-60/61-90/90+."},
+        {"name": "Status", "type": "STRING", "mode": "NULLABLE", "description": "Open/Overdue/Paid."}
+      ],
+      "seed_plan": {"type": "generate_overdue_snapshots", "params": {"invoices_from": "qic_dev_payments.fact_invoices", "max_snapshots_rows_cap": 1200000}, "row_target": 1200000}
+    },
+    {
+      "dataset_id": "qic_dev_payments",
+      "table_id": "fact_disputes",
+      "description": "Invoice disputes lifecycle. Grain: 1 row per Dispute_ID.",
+      "grain": "1 row per dispute",
+      "primary_key": ["Dispute_ID"],
+      "foreign_keys": [{"columns": ["Invoice_ID"], "ref_table": "qic_dev_payments.fact_invoices", "ref_columns": ["Invoice_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Opened_Date"},
+      "clustering_fields": ["Status"],
+      "columns": [
+        {"name": "Dispute_ID", "type": "STRING", "mode": "REQUIRED", "description": "Dispute ID."},
+        {"name": "Invoice_ID", "type": "STRING", "mode": "NULLABLE", "description": "Invoice."},
+        {"name": "Opened_Date", "type": "DATE", "mode": "NULLABLE", "description": "Opened date."},
+        {"name": "Closed_Date", "type": "DATE", "mode": "NULLABLE", "description": "Closed date."},
+        {"name": "Status", "type": "STRING", "mode": "NULLABLE", "description": "Open/Resolved/Rejected."},
+        {"name": "Dispute_Reason", "type": "STRING", "mode": "NULLABLE", "description": "Reason."}
+      ],
+      "seed_plan": {"type": "generate_disputes", "params": {"invoices_from": "qic_dev_payments.fact_invoices", "dispute_rate": 0.02}, "row_target": 3600}
+    },
+
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "dim_gate",
+      "description": "Theme park gates. Grain: 1 row per Gate_ID.",
+      "grain": "1 row per Gate_ID",
+      "primary_key": ["Gate_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": null,
+      "clustering_fields": [],
+      "columns": [
+        {"name": "Gate_ID", "type": "STRING", "mode": "REQUIRED", "description": "Gate ID."},
+        {"name": "Gate_Name", "type": "STRING", "mode": "NULLABLE", "description": "Gate name."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset (Six Flags)."}
+      ],
+      "seed_plan": {"type": "generate_gates", "params": {"gate_count": 6}, "row_target": 6}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "dim_ride",
+      "description": "Theme park rides. Grain: 1 row per Ride_ID.",
+      "grain": "1 row per Ride_ID",
+      "primary_key": ["Ride_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": null,
+      "clustering_fields": ["Ride_Category"],
+      "columns": [
+        {"name": "Ride_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ride ID."},
+        {"name": "Ride_Name", "type": "STRING", "mode": "NULLABLE", "description": "Ride name."},
+        {"name": "Ride_Category", "type": "STRING", "mode": "NULLABLE", "description": "Thrill/Family/Kids/Water."},
+        {"name": "Capacity_Per_Cycle", "type": "INT64", "mode": "NULLABLE", "description": "Capacity per cycle."},
+        {"name": "Average_Cycle_Min", "type": "FLOAT64", "mode": "NULLABLE", "description": "Avg cycle minutes."},
+        {"name": "Is_Operational", "type": "BOOL", "mode": "NULLABLE", "description": "Operational flag."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset (Six Flags)."}
+      ],
+      "seed_plan": {"type": "generate_rides", "params": {"ride_count": 35}, "row_target": 35}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "dim_outlet",
+      "description": "F&B / Retail outlets. Grain: 1 row per Outlet_ID.",
+      "grain": "1 row per Outlet_ID",
+      "primary_key": ["Outlet_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": null,
+      "clustering_fields": ["Outlet_Type"],
+      "columns": [
+        {"name": "Outlet_ID", "type": "STRING", "mode": "REQUIRED", "description": "Outlet ID."},
+        {"name": "Outlet_Name", "type": "STRING", "mode": "NULLABLE", "description": "Outlet name."},
+        {"name": "Outlet_Type", "type": "STRING", "mode": "NULLABLE", "description": "F&B/Retail."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset."}
+      ],
+      "seed_plan": {"type": "generate_outlets", "params": {"outlet_count": 80}, "row_target": 80}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "dim_product",
+      "description": "POS products for park (food/merch). Grain: 1 row per Product_ID.",
+      "grain": "1 row per Product_ID",
+      "primary_key": ["Product_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Category"],
+      "columns": [
+        {"name": "Product_ID", "type": "STRING", "mode": "REQUIRED", "description": "Product ID."},
+        {"name": "Product_Name", "type": "STRING", "mode": "NULLABLE", "description": "Product name."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Food/Drink/Merch/etc."},
+        {"name": "Base_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Base price."}
+      ],
+      "seed_plan": {"type": "generate_products", "params": {"product_count": 1200}, "row_target": 1200}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "dim_ticket_product",
+      "description": "Ticket product catalog. Grain: 1 row per Ticket_Product_ID.",
+      "grain": "1 row per Ticket_Product_ID",
+      "primary_key": ["Ticket_Product_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": null,
+      "clustering_fields": ["Ticket_Product_Type"],
+      "columns": [
+        {"name": "Ticket_Product_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ticket product ID."},
+        {"name": "Ticket_Product_Name", "type": "STRING", "mode": "NULLABLE", "description": "Name."},
+        {"name": "Ticket_Product_Type", "type": "STRING", "mode": "NULLABLE", "description": "DayPass/VIP/Annual/etc."},
+        {"name": "Base_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Base price."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset."}
+      ],
+      "seed_plan": {"type": "generate_ticket_products", "params": {"ticket_product_count": 25}, "row_target": 25}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_ticket_sales",
+      "description": "Ticket sales transactions. Grain: 1 row per Ticket_TXN_ID.",
+      "grain": "1 row per ticket transaction",
+      "primary_key": ["Ticket_TXN_ID"],
+      "foreign_keys": [
+        {"columns": ["Date"], "ref_table": "qic_generic.dim_date", "ref_columns": ["Date"]},
+        {"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Sales_Channel", "Ticket_Product_ID"],
+      "columns": [
+        {"name": "Ticket_TXN_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ticket transaction ID."},
+        {"name": "TXN_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Transaction timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Transaction date."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset."},
+        {"name": "Sales_Channel", "type": "STRING", "mode": "NULLABLE", "description": "Online/Onsite/Partner."},
+        {"name": "Ticket_Product_ID", "type": "STRING", "mode": "NULLABLE", "description": "Ticket product."},
+        {"name": "Quantity", "type": "INT64", "mode": "NULLABLE", "description": "Tickets qty."},
+        {"name": "Gross_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Gross."},
+        {"name": "Discount_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Discount."},
+        {"name": "Net_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Net."},
+        {"name": "Tax_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Tax."},
+        {"name": "Promotion_Code", "type": "STRING", "mode": "NULLABLE", "description": "Promotion code."}
+      ],
+      "seed_plan": {
+        "type": "generate_themepark_ticket_sales",
+        "params": {
+          "txns_per_year_ref": "scale.sixflags_ticket_txn_per_year",
+          "date_start_ref": "time_config.calendar_start_date",
+          "date_end_ref": "time_config.calendar_end_date",
+          "events_from": "qic_generic.fact_event_calendar",
+          "weather_from": "qic_generic.fact_weather_daily",
+          "weekly_seasonality": true,
+          "event_uplift": true,
+          "extreme_heat_suppression": true
+        },
+        "row_target": 2700000
+      }
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_ticket_redemptions",
+      "description": "Gate redemptions/entries for tickets. Grain: 1 row per redemption scan. PK: Redemption_ID.",
+      "grain": "1 row per redemption scan",
+      "primary_key": ["Redemption_ID"],
+      "foreign_keys": [{"columns": ["Ticket_TXN_ID"], "ref_table": "qic_asset_sixflags.fact_ticket_sales", "ref_columns": ["Ticket_TXN_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Gate_ID"],
+      "columns": [
+        {"name": "Redemption_ID", "type": "STRING", "mode": "REQUIRED", "description": "Redemption scan ID."},
+        {"name": "Ticket_TXN_ID", "type": "STRING", "mode": "NULLABLE", "description": "Ticket transaction."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Redemption date."},
+        {"name": "Scan_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Scan timestamp."},
+        {"name": "Gate_ID", "type": "STRING", "mode": "NULLABLE", "description": "Gate."},
+        {"name": "Entries", "type": "INT64", "mode": "NULLABLE", "description": "Entries count (usually 1)."}
+      ],
+      "seed_plan": {"type": "generate_redemptions", "params": {"ticket_sales_from": "qic_asset_sixflags.fact_ticket_sales", "redemption_rate": 0.92, "avg_lag_days_range": [0, 7]}, "row_target": 2480000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_footfall_gate_hourly",
+      "description": "Hourly gate footfall. Grain: 1 row per Gate_ID per hour. PK: (Gate_ID, Hour_TS).",
+      "grain": "1 row per gate per hour",
+      "primary_key": ["Gate_ID", "Hour_TS"],
+      "foreign_keys": [{"columns": ["Gate_ID"], "ref_table": "qic_asset_sixflags.dim_gate", "ref_columns": ["Gate_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Gate_ID"],
+      "columns": [
+        {"name": "Gate_ID", "type": "STRING", "mode": "REQUIRED", "description": "Gate."},
+        {"name": "Hour_TS", "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Hour timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Entries", "type": "INT64", "mode": "NULLABLE", "description": "Entries."},
+        {"name": "Exits", "type": "INT64", "mode": "NULLABLE", "description": "Exits."},
+        {"name": "In_Park_Estimate", "type": "INT64", "mode": "NULLABLE", "description": "In-park estimate."}
+      ],
+      "seed_plan": {"type": "generate_gate_hourly_footfall", "params": {"gates_from": "qic_asset_sixflags.dim_gate", "date_start_ref": "time_config.calendar_start_date", "date_end_ref": "time_config.calendar_end_date", "operating_hours": [10, 23], "events_from": "qic_generic.fact_event_calendar", "weather_from": "qic_generic.fact_weather_daily"}, "row_target": 95000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_ride_operations_hourly",
+      "description": "Hourly ride operations KPIs (throughput, downtime). Grain: 1 row per Ride_ID per hour. PK: (Ride_ID, Hour_TS).",
+      "grain": "1 row per ride per hour",
+      "primary_key": ["Ride_ID", "Hour_TS"],
+      "foreign_keys": [{"columns": ["Ride_ID"], "ref_table": "qic_asset_sixflags.dim_ride", "ref_columns": ["Ride_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Ride_ID"],
+      "columns": [
+        {"name": "Ride_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ride."},
+        {"name": "Hour_TS", "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Hour timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Operating_Minutes", "type": "INT64", "mode": "NULLABLE", "description": "Operating minutes."},
+        {"name": "Downtime_Minutes", "type": "INT64", "mode": "NULLABLE", "description": "Downtime minutes."},
+        {"name": "Downtime_Reason", "type": "STRING", "mode": "NULLABLE", "description": "Reason."},
+        {"name": "Cycles", "type": "INT64", "mode": "NULLABLE", "description": "Cycles run."},
+        {"name": "Riders", "type": "INT64", "mode": "NULLABLE", "description": "Riders served."},
+        {"name": "Utilization_Pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Utilization %."},
+        {"name": "Staff_On_Duty", "type": "INT64", "mode": "NULLABLE", "description": "Staff count."}
+      ],
+      "seed_plan": {"type": "generate_ride_ops_hourly", "params": {"rides_from": "qic_asset_sixflags.dim_ride", "date_start_ref": "time_config.calendar_start_date", "date_end_ref": "time_config.calendar_end_date", "operating_hours": [10, 23], "downtime_event_rate": 0.03}, "row_target": 560000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_ride_downtime_events",
+      "description": "Ride downtime events (event-level). Grain: 1 row per downtime event. PK: Downtime_Event_ID.",
+      "grain": "1 row per downtime event",
+      "primary_key": ["Downtime_Event_ID"],
+      "foreign_keys": [{"columns": ["Ride_ID"], "ref_table": "qic_asset_sixflags.dim_ride", "ref_columns": ["Ride_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Start_Date"},
+      "clustering_fields": ["Ride_ID"],
+      "columns": [
+        {"name": "Downtime_Event_ID", "type": "STRING", "mode": "REQUIRED", "description": "Downtime event ID."},
+        {"name": "Ride_ID", "type": "STRING", "mode": "NULLABLE", "description": "Ride."},
+        {"name": "Start_Date", "type": "DATE", "mode": "NULLABLE", "description": "Start date."},
+        {"name": "Start_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Start timestamp."},
+        {"name": "End_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "End timestamp."},
+        {"name": "Downtime_Reason", "type": "STRING", "mode": "NULLABLE", "description": "Reason."},
+        {"name": "Downtime_Minutes", "type": "INT64", "mode": "NULLABLE", "description": "Duration minutes."}
+      ],
+      "seed_plan": {"type": "generate_downtime_events", "params": {"rides_from": "qic_asset_sixflags.dim_ride", "events_per_ride_per_month_range": [0, 6]}, "row_target": 3500}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_pos_purchases",
+      "description": "POS purchases line-level for basket analysis. Grain: 1 row per POS_Line_ID.",
+      "grain": "1 row per POS line",
+      "primary_key": ["POS_Line_ID"],
+      "foreign_keys": [
+        {"columns": ["Outlet_ID"], "ref_table": "qic_asset_sixflags.dim_outlet", "ref_columns": ["Outlet_ID"]},
+        {"columns": ["Product_ID"], "ref_table": "qic_asset_sixflags.dim_product", "ref_columns": ["Product_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Outlet_ID", "Category"],
+      "columns": [
+        {"name": "POS_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "POS line ID."},
+        {"name": "Transaction_ID", "type": "STRING", "mode": "NULLABLE", "description": "POS transaction ID."},
+        {"name": "TXN_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Transaction timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Outlet_ID", "type": "STRING", "mode": "NULLABLE", "description": "Outlet."},
+        {"name": "Outlet_Type", "type": "STRING", "mode": "NULLABLE", "description": "F&B/Retail (denorm)."},
+        {"name": "Product_ID", "type": "STRING", "mode": "NULLABLE", "description": "Product."},
+        {"name": "Product_Name", "type": "STRING", "mode": "NULLABLE", "description": "Product name (denorm)."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Category."},
+        {"name": "Quantity", "type": "NUMERIC", "mode": "NULLABLE", "description": "Qty."},
+        {"name": "Unit_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Unit price."},
+        {"name": "Net_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Net amount."},
+        {"name": "Payment_Method", "type": "STRING", "mode": "NULLABLE", "description": "Payment method."}
+      ],
+      "seed_plan": {"type": "generate_pos_lines", "params": {"lines_per_year_ref": "scale.sixflags_pos_lines_per_year", "outlets_from": "qic_asset_sixflags.dim_outlet", "products_from": "qic_asset_sixflags.dim_product", "events_from": "qic_generic.fact_event_calendar"}, "row_target": 8100000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_queue_time_samples",
+      "description": "Queue time samples (e.g., every 15 min). Grain: 1 row per Ride_ID per Sample_TS.",
+      "grain": "1 row per ride per sample time",
+      "primary_key": ["Ride_ID", "Sample_TS"],
+      "foreign_keys": [{"columns": ["Ride_ID"], "ref_table": "qic_asset_sixflags.dim_ride", "ref_columns": ["Ride_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Ride_ID"],
+      "columns": [
+        {"name": "Ride_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ride."},
+        {"name": "Sample_TS", "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Sample timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Queue_Minutes", "type": "FLOAT64", "mode": "NULLABLE", "description": "Estimated queue minutes."}
+      ],
+      "seed_plan": {"type": "generate_queue_samples", "params": {"rides_from": "qic_asset_sixflags.dim_ride", "date_start_ref": "time_config.calendar_start_date", "date_end_ref": "time_config.calendar_end_date", "sample_interval_minutes": 30, "cap_rows": 1800000}, "row_target": 1800000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_customer_satisfaction",
+      "description": "Survey responses (NPS/CSAT). Grain: 1 row per Survey_Response_ID.",
+      "grain": "1 row per survey response",
+      "primary_key": ["Survey_Response_ID"],
+      "foreign_keys": [{"columns": ["Ride_ID"], "ref_table": "qic_asset_sixflags.dim_ride", "ref_columns": ["Ride_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Channel"],
+      "columns": [
+        {"name": "Survey_Response_ID", "type": "STRING", "mode": "REQUIRED", "description": "Survey response ID."},
+        {"name": "Response_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Response timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Channel", "type": "STRING", "mode": "NULLABLE", "description": "App/Kiosk/Email."},
+        {"name": "NPS_Score", "type": "INT64", "mode": "NULLABLE", "description": "NPS score."},
+        {"name": "CSAT_Score", "type": "INT64", "mode": "NULLABLE", "description": "CSAT score."},
+        {"name": "Ride_ID", "type": "STRING", "mode": "NULLABLE", "description": "Ride (optional)."},
+        {"name": "Outlet_ID", "type": "STRING", "mode": "NULLABLE", "description": "Outlet (optional)."},
+        {"name": "Free_Text", "type": "STRING", "mode": "NULLABLE", "description": "Feedback text."},
+        {"name": "Sentiment_Score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Sentiment score."},
+        {"name": "Issue_Category", "type": "STRING", "mode": "NULLABLE", "description": "Issue category."}
+      ],
+      "seed_plan": {"type": "generate_surveys", "params": {"responses_per_year": 60000, "rides_from": "qic_asset_sixflags.dim_ride", "outlets_from": "qic_asset_sixflags.dim_outlet"}, "row_target": 180000}
+    },
+    {
+      "dataset_id": "qic_asset_sixflags",
+      "table_id": "fact_incidents",
+      "description": "Operational/safety incidents. Grain: 1 row per Incident_ID.",
+      "grain": "1 row per incident",
+      "primary_key": ["Incident_ID"],
+      "foreign_keys": [{"columns": ["Asset_ID"], "ref_table": "qic_shared.dim_asset", "ref_columns": ["Asset_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Incident_Date"},
+      "clustering_fields": ["Severity"],
+      "columns": [
+        {"name": "Incident_ID", "type": "STRING", "mode": "REQUIRED", "description": "Incident ID."},
+        {"name": "Incident_Date", "type": "DATE", "mode": "NULLABLE", "description": "Incident date."},
+        {"name": "Asset_ID", "type": "STRING", "mode": "NULLABLE", "description": "Asset."},
+        {"name": "Ride_ID", "type": "STRING", "mode": "NULLABLE", "description": "Ride (optional)."},
+        {"name": "Severity", "type": "STRING", "mode": "NULLABLE", "description": "Low/Medium/High."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Safety/Ops/Guest."},
+        {"name": "Description", "type": "STRING", "mode": "NULLABLE", "description": "Incident description."}
+      ],
+      "seed_plan": {"type": "generate_incidents", "params": {"incidents_per_year": 180}, "row_target": 540}
+    },
+
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "dim_cinema",
+      "description": "Cinema dimension. Grain: 1 row per Cinema_ID.",
+      "grain": "1 row per Cinema_ID",
+      "primary_key": ["Cinema_ID"],
+      "foreign_keys": [{"columns": ["Location_ID"], "ref_table": "qic_shared.dim_location", "ref_columns": ["Location_ID"]}],
+      "partitioning": null,
+      "clustering_fields": ["City"],
+      "columns": [
+        {"name": "Cinema_ID", "type": "STRING", "mode": "REQUIRED", "description": "Cinema ID."},
+        {"name": "Cinema_Name", "type": "STRING", "mode": "NULLABLE", "description": "Cinema name."},
+        {"name": "City", "type": "STRING", "mode": "NULLABLE", "description": "City."},
+        {"name": "Location_ID", "type": "STRING", "mode": "NULLABLE", "description": "Location."},
+        {"name": "Screens", "type": "INT64", "mode": "NULLABLE", "description": "Screens count."},
+        {"name": "Premium_Formats", "type": "STRING", "mode": "NULLABLE", "description": "IMAX/4DX/Dolby/etc."}
+      ],
+      "seed_plan": {"type": "generate_cinemas", "params": {"cinema_count": 20}, "row_target": 20}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "dim_film",
+      "description": "Film dimension. Grain: 1 row per Film_ID.",
+      "grain": "1 row per Film_ID",
+      "primary_key": ["Film_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Genre"],
+      "columns": [
+        {"name": "Film_ID", "type": "STRING", "mode": "REQUIRED", "description": "Film ID."},
+        {"name": "Film_Title", "type": "STRING", "mode": "NULLABLE", "description": "Film title."},
+        {"name": "Distributor", "type": "STRING", "mode": "NULLABLE", "description": "Distributor."},
+        {"name": "Genre", "type": "STRING", "mode": "NULLABLE", "description": "Genre."},
+        {"name": "Release_Date", "type": "DATE", "mode": "NULLABLE", "description": "Release date."},
+        {"name": "Language", "type": "STRING", "mode": "NULLABLE", "description": "Language."},
+        {"name": "Runtime_Min", "type": "INT64", "mode": "NULLABLE", "description": "Runtime minutes."}
+      ],
+      "seed_plan": {"type": "generate_films", "params": {"film_count": 1200, "release_curve": "weekly"}, "row_target": 1200}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "fact_screenings",
+      "description": "Screening schedule (showtimes). Grain: 1 row per Session_ID.",
+      "grain": "1 row per Session_ID",
+      "primary_key": ["Session_ID"],
+      "foreign_keys": [
+        {"columns": ["Cinema_ID"], "ref_table": "qic_asset_amc.dim_cinema", "ref_columns": ["Cinema_ID"]},
+        {"columns": ["Film_ID"], "ref_table": "qic_asset_amc.dim_film", "ref_columns": ["Film_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Cinema_ID", "Film_ID"],
+      "columns": [
+        {"name": "Session_ID", "type": "STRING", "mode": "REQUIRED", "description": "Session/showtime ID."},
+        {"name": "Cinema_ID", "type": "STRING", "mode": "NULLABLE", "description": "Cinema."},
+        {"name": "Film_ID", "type": "STRING", "mode": "NULLABLE", "description": "Film."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Show date."},
+        {"name": "Start_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Start timestamp."},
+        {"name": "Screen_Number", "type": "INT64", "mode": "NULLABLE", "description": "Screen number."},
+        {"name": "Session_Format", "type": "STRING", "mode": "NULLABLE", "description": "2D/3D/IMAX/etc."},
+        {"name": "Capacity_Seats", "type": "INT64", "mode": "NULLABLE", "description": "Seat capacity."}
+      ],
+      "seed_plan": {"type": "generate_screenings", "params": {"cinemas_from": "qic_asset_amc.dim_cinema", "films_from": "qic_asset_amc.dim_film", "shows_per_screen_per_day_range": [3, 6]}, "row_target": 750000}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "fact_cinema_ticket_sales",
+      "description": "Cinema ticket sales transactions. Grain: 1 row per Ticket_TXN_ID.",
+      "grain": "1 row per ticket transaction",
+      "primary_key": ["Ticket_TXN_ID"],
+      "foreign_keys": [
+        {"columns": ["Cinema_ID"], "ref_table": "qic_asset_amc.dim_cinema", "ref_columns": ["Cinema_ID"]},
+        {"columns": ["Film_ID"], "ref_table": "qic_asset_amc.dim_film", "ref_columns": ["Film_ID"]},
+        {"columns": ["Session_ID"], "ref_table": "qic_asset_amc.fact_screenings", "ref_columns": ["Session_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Cinema_ID", "Film_ID"],
+      "columns": [
+        {"name": "Ticket_TXN_ID", "type": "STRING", "mode": "REQUIRED", "description": "Ticket transaction ID."},
+        {"name": "TXN_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Transaction timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Cinema_ID", "type": "STRING", "mode": "NULLABLE", "description": "Cinema."},
+        {"name": "Film_ID", "type": "STRING", "mode": "NULLABLE", "description": "Film."},
+        {"name": "Session_ID", "type": "STRING", "mode": "NULLABLE", "description": "Session."},
+        {"name": "Sales_Channel", "type": "STRING", "mode": "NULLABLE", "description": "Online/Onsite/Partner."},
+        {"name": "Quantity", "type": "INT64", "mode": "NULLABLE", "description": "Tickets qty."},
+        {"name": "Gross_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Gross."},
+        {"name": "Net_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Net."},
+        {"name": "Tax_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Tax."},
+        {"name": "Promotion_Code", "type": "STRING", "mode": "NULLABLE", "description": "Promotion."}
+      ],
+      "seed_plan": {"type": "generate_cinema_ticket_sales", "params": {"txns_per_year_ref": "scale.amc_ticket_txn_per_year", "screenings_from": "qic_asset_amc.fact_screenings", "events_from": "qic_generic.fact_event_calendar", "weekly_seasonality": true, "film_decay_curve": true}, "row_target": 1350000}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "dim_concession_product",
+      "description": "Concession products. Grain: 1 row per Product_ID.",
+      "grain": "1 row per Product_ID",
+      "primary_key": ["Product_ID"],
+      "foreign_keys": [],
+      "partitioning": null,
+      "clustering_fields": ["Category"],
+      "columns": [
+        {"name": "Product_ID", "type": "STRING", "mode": "REQUIRED", "description": "Product ID."},
+        {"name": "Product_Name", "type": "STRING", "mode": "NULLABLE", "description": "Name."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Popcorn/Drinks/Candy/etc."},
+        {"name": "Base_Price", "type": "NUMERIC", "mode": "NULLABLE", "description": "Base price."}
+      ],
+      "seed_plan": {"type": "generate_concession_products", "params": {"product_count": 400}, "row_target": 400}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "fact_fnb_sales",
+      "description": "F&B/concessions sales line-level. Grain: 1 row per FNB_Line_ID.",
+      "grain": "1 row per F&B line",
+      "primary_key": ["FNB_Line_ID"],
+      "foreign_keys": [
+        {"columns": ["Cinema_ID"], "ref_table": "qic_asset_amc.dim_cinema", "ref_columns": ["Cinema_ID"]},
+        {"columns": ["Product_ID"], "ref_table": "qic_asset_amc.dim_concession_product", "ref_columns": ["Product_ID"]}
+      ],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Cinema_ID", "Category"],
+      "columns": [
+        {"name": "FNB_Line_ID", "type": "STRING", "mode": "REQUIRED", "description": "F&B line ID."},
+        {"name": "Transaction_ID", "type": "STRING", "mode": "NULLABLE", "description": "Transaction ID."},
+        {"name": "TXN_TS", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date."},
+        {"name": "Cinema_ID", "type": "STRING", "mode": "NULLABLE", "description": "Cinema."},
+        {"name": "Product_ID", "type": "STRING", "mode": "NULLABLE", "description": "Product."},
+        {"name": "Product_Name", "type": "STRING", "mode": "NULLABLE", "description": "Name (denorm)."},
+        {"name": "Category", "type": "STRING", "mode": "NULLABLE", "description": "Category."},
+        {"name": "Quantity", "type": "NUMERIC", "mode": "NULLABLE", "description": "Qty."},
+        {"name": "Net_Amount", "type": "NUMERIC", "mode": "NULLABLE", "description": "Net amount."}
+      ],
+      "seed_plan": {"type": "generate_fnb_lines", "params": {"lines_per_year_ref": "scale.amc_fnb_lines_per_year", "cinemas_from": "qic_asset_amc.dim_cinema", "products_from": "qic_asset_amc.dim_concession_product", "attach_rate_model": true}, "row_target": 2700000}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "fact_occupancy_by_session",
+      "description": "Derived occupancy KPIs per session. Grain: 1 row per Session_ID.",
+      "grain": "1 row per Session_ID",
+      "primary_key": ["Session_ID"],
+      "foreign_keys": [{"columns": ["Session_ID"], "ref_table": "qic_asset_amc.fact_screenings", "ref_columns": ["Session_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Cinema_ID"],
+      "columns": [
+        {"name": "Session_ID", "type": "STRING", "mode": "REQUIRED", "description": "Session."},
+        {"name": "Date", "type": "DATE", "mode": "NULLABLE", "description": "Date (denorm)."},
+        {"name": "Cinema_ID", "type": "STRING", "mode": "NULLABLE", "description": "Cinema (denorm)."},
+        {"name": "Film_ID", "type": "STRING", "mode": "NULLABLE", "description": "Film (denorm)."},
+        {"name": "Capacity_Seats", "type": "INT64", "mode": "NULLABLE", "description": "Capacity seats."},
+        {"name": "Tickets_Sold", "type": "INT64", "mode": "NULLABLE", "description": "Tickets sold."},
+        {"name": "Occupancy_Pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Tickets_Sold / Capacity."}
+      ],
+      "seed_plan": {"type": "derive_occupancy", "params": {"screenings_from": "qic_asset_amc.fact_screenings", "ticket_sales_from": "qic_asset_amc.fact_cinema_ticket_sales"}, "row_target": 750000}
+    },
+    {
+      "dataset_id": "qic_asset_amc",
+      "table_id": "sem_amc_sales_overall_daily",
+      "description": "Independent semantic summary for dashboards. Grain: 1 row per Date per Cinema_ID.",
+      "grain": "1 row per Cinema per Date",
+      "primary_key": ["Date", "Cinema_ID"],
+      "foreign_keys": [{"columns": ["Cinema_ID"], "ref_table": "qic_asset_amc.dim_cinema", "ref_columns": ["Cinema_ID"]}],
+      "partitioning": {"type": "DAY", "field": "Date"},
+      "clustering_fields": ["Cinema_ID"],
+      "columns": [
+        {"name": "Date", "type": "DATE", "mode": "REQUIRED", "description": "Date."},
+        {"name": "Cinema_ID", "type": "STRING", "mode": "REQUIRED", "description": "Cinema."},
+        {"name": "Tickets_Net_Revenue", "type": "NUMERIC", "mode": "NULLABLE", "description": "Tickets net revenue."},
+        {"name": "FNB_Net_Revenue", "type": "NUMERIC", "mode": "NULLABLE", "description": "F&B net revenue."},
+        {"name": "Total_Net_Revenue", "type": "NUMERIC", "mode": "NULLABLE", "description": "Total net revenue."},
+        {"name": "Admissions", "type": "INT64", "mode": "NULLABLE", "description": "Admissions."},
+        {"name": "Transactions", "type": "INT64", "mode": "NULLABLE", "description": "Transactions."}
+      ],
+      "seed_plan": {"type": "derive_amc_daily_summary", "params": {"ticket_sales_from": "qic_asset_amc.fact_cinema_ticket_sales", "fnb_from": "qic_asset_amc.fact_fnb_sales"}, "row_target": 22000}
+    }
+  ],
+  "notes": [
+    "PK/FK are metadata only (BigQuery does not enforce).",
+    "Partitioning/clustering suggestions are included; apply via BigQuery API for best performance.",
+    "Seed plans are declarative; implement using your synthetic generator + optional LLM enrichment."
+  ]
+}
